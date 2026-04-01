@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weather Forecast — ARIMA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky:    #0a0e1a;
+      --deep:   #060910;
+      --cloud:  #111827;
+      --accent: #38bdf8;
+      --gold:   #fbbf24;
+      --text:   #e2e8f0;
+      --muted:  #64748b;
+      --glass:  rgba(255,255,255,0.04);
+      --border: rgba(56,189,248,0.18);
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--sky);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Animated star field ── */
+    .stars {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .star {
+      position: absolute;
+      border-radius: 50%;
+      background: white;
+      animation: twinkle var(--d, 3s) ease-in-out infinite;
+      animation-delay: var(--delay, 0s);
+      opacity: 0;
+    }
+    @keyframes twinkle {
+      0%,100% { opacity: 0; transform: scale(0.8); }
+      50%      { opacity: var(--op, 0.7); transform: scale(1.2); }
+    }
+
+    /* ── Aurora glow ── */
+    .aurora {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 40% at 20% 0%, rgba(56,189,248,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 30% at 80% 10%, rgba(99,102,241,0.10) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 20% at 50% 0%,  rgba(251,191,36,0.06) 0%, transparent 50%);
+      animation: auroraShift 12s ease-in-out infinite alternate;
+    }
+    @keyframes auroraShift {
+      from { opacity: 0.7; transform: scaleY(1); }
+      to   { opacity: 1;   transform: scaleY(1.3) translateY(-10px); }
+    }
+
+    /* ── Floating clouds ── */
+    .clouds { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .cloud {
+      position: absolute;
+      border-radius: 50px;
+      background: rgba(255,255,255,0.025);
+      filter: blur(30px);
+      animation: drift linear infinite;
+    }
+    @keyframes drift {
+      from { transform: translateX(-200px); }
+      to   { transform: translateX(110vw); }
+    }
+
+    /* ── Card ── */
+    .card {
+      position: relative; z-index: 10;
+      width: min(520px, 94vw);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 52px 48px 44px;
+      backdrop-filter: blur(24px);
+      box-shadow:
+        0 0 0 1px rgba(56,189,248,0.06),
+        0 32px 80px rgba(0,0,0,0.6),
+        inset 0 1px 0 rgba(255,255,255,0.07);
+      animation: cardIn 0.9s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(40px) scale(0.97); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(56,189,248,0.1);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+    .badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(56,189,248,0.6); }
+      50%      { opacity: 0.7; box-shadow: 0 0 0 5px rgba(56,189,248,0); }
+    }
+
+    /* ── Headline ── */
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(42px, 9vw, 58px);
+      line-height: 0.95;
+      letter-spacing: 0.02em;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    h1 span { color: var(--accent); }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      font-weight: 300;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin-bottom: 32px;
+    }
+
+    /* ── Form ── */
+    .field-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    input[type="number"] {
+      flex: 1;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button { display: none; }
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56,189,248,0.12);
+    }
+    input[type="number"]::placeholder { color: var(--muted); }
+
+    button {
+      background: var(--accent);
+      color: #020b14;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 26px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(56,189,248,0.25);
+    }
+    button:hover {
+      background: #7dd3fc;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 28px rgba(56,189,248,0.35);
+    }
+    button:active { transform: translateY(0); }
+
+    /* ── Result ── */
+    .result-box {
+      background: rgba(56,189,248,0.06);
+      border: 1px solid rgba(56,189,248,0.2);
+      border-radius: 16px;
+      padding: 20px 22px;
+      animation: fadeUp 0.5s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .result-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .result-text {
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.7;
+      font-weight: 300;
+      word-break: break-word;
+    }
+
+    .error-box {
+      background: rgba(239,68,68,0.07);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 16px;
+      padding: 18px 22px;
+      animation: fadeUp 0.5s ease both;
+    }
+    .error-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f87171;
+      margin-bottom: 6px;
+    }
+    .error-text { font-size: 13px; color: #fca5a5; font-weight: 300; }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer-tag {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    .model-tag {
+      font-size: 11px;
+      background: rgba(251,191,36,0.1);
+      border: 1px solid rgba(251,191,36,0.2);
+      color: var(--gold);
+      padding: 3px 10px;
+      border-radius: 999px;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Stars -->
+  <div class="stars" id="stars"></div>
+  <!-- Aurora -->
+  <div class="aurora"></div>
+  <!-- Clouds -->
+  <div class="clouds" id="clouds"></div>
+
+  <div class="card">
+    <div class="badge"><span class="badge-dot"></span> Live Model</div>
+
+    <h1>Weather<br><span>Forecast</span></h1>
+    <p class="subtitle">Powered by ARIMA time-series prediction</p>
+
+    <div class="divider"></div>
+
+    <form action="/predict" method="POST">
+      <p class="field-label">Days to forecast</p>
+      <div class="input-row">
+        <input type="number" name="days" min="1" max="365" placeholder="e.g. 7" required />
+        <button type="submit">Predict →</button>
+      </div>
+    </form>
+
+    {% if prediction_text %}
+      {% if 'Error' in prediction_text %}
+        <div class="error-box">
+          <div class="error-label">⚠ Error</div>
+          <div class="error-text">{{ prediction_text }}</div>
+        </div>
+      {% else %}
+        <div class="result-box">
+          <div class="result-label">✦ Forecast Results</div>
+          <div class="result-text">{{ prediction_text }}</div>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    <div class="footer">
+      <span class="footer-tag">© 2026 WeatherAI</span>
+      <span class="model-tag">ARIMA Model</span>
+    </div>
+  </div>
+
+  <script>
+    // Stars
+    const starsEl = document.getElementById('stars');
+    for (let i = 0; i < 130; i++) {
+      const s = document.createElement('div');
+      s.className = 'star';
+      const size = Math.random() * 2.5 + 0.5;
+      s.style.cssText = `
+        width:${size}px; height:${size}px;
+        left:${Math.random()*100}%; top:${Math.random()*100}%;
+        --d:${(Math.random()*4+2).toFixed(1)}s;
+        --delay:${(Math.random()*6).toFixed(1)}s;
+        --op:${(Math.random()*0.5+0.3).toFixed(2)};
+      `;
+      starsEl.appendChild(s);
+    }
+
+    // Clouds
+    const cloudsEl = document.getElementById('clouds');
+    const cloudData = [
+      { w:320, h:60, top:15, dur:38 },
+      { w:500, h:80, top:40, dur:55 },
+      { w:260, h:50, top:65, dur:42 },
+      { w:400, h:70, top:80, dur:60 },
+    ];
+    cloudData.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'cloud';
+      el.style.cssText = `
+        width:${c.w}px; height:${c.h}px;
+        top:${c.top}%; left:-${c.w}px;
+        animation-duration:${c.dur}s;
+        animation-delay:-${Math.random()*c.dur}s;
+      `;
+      cloudsEl.appendChild(el);
+    });
+  </script>
+</body>
+</html>
