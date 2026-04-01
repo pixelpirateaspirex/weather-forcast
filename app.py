@@ -6,7 +6,7 @@ import pandas as pd
 app = Flask(__name__)
 
 # Load trained ARIMA model
-model = pickle.load(open('weather(3).pkl', 'rb'))
+model = pickle.load(open('weather.pkl', 'rb'))
 
 @app.route('/')
 def home():
